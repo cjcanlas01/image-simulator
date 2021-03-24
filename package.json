@@ -2,7 +2,7 @@
   "name": "template-simulation",
   "version": "1.0.0",
   "description": "",
-  "main": "app.js",
+  "main": "api/app.js",
   "dependencies": {
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
