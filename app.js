@@ -7,10 +7,10 @@ const server = express();
 
 /**
  * Add directory path to project path
- * @param {string} p
+ * @param {string} dir
  * @returns directory path
  */
-const withRootPath = (p) => path.join(__dirname, p);
+const withRootPath = (dir) => path.join(__dirname, dir);
 
 /**
  * Generate image
@@ -18,14 +18,22 @@ const withRootPath = (p) => path.join(__dirname, p);
  * @returns {string} path to image
  */
 const generateImage = async (file) => {
-  const fileArgs = file.split(".");
-  const template = "template/template.jpg";
-  const design = `design/${fileArgs[0]}.png`;
+  const index = file.indexOf("-", file.indexOf("-") + 1);
+  let template = file.slice(0, index);
+  let design = file.slice(index + 1).replace(".jpg", "");
+  const output = `output/${file}`;
 
+  template = `template/${template}.jpg`;
+  design = `design/${design}.png`;
+
+  /**
+   * Check template and design file first if exists
+   */
+  if (!fs.existsSync(withRootPath(template)))
+    return "Template file does not exists!";
   if (!fs.existsSync(withRootPath(design)))
     return "Design file does not exists!";
 
-  const output = `output/${file}`;
   const details = await sharp(template)
     .composite([{ input: design }])
     .toFile(output);
@@ -34,14 +42,14 @@ const generateImage = async (file) => {
 };
 
 server.get("/", async (req, res) => {
-  res.send("<h1>Hello from Simulation File!</h1>");
+  res.send("Hello from template simulation app!");
 });
 
 server.get("/autogen/:file", async (req, res) => {
   const file = req.params.file;
-  const outputPath = withRootPath(`output/${file}`);
+  const outputFile = withRootPath(`output/${file}`);
 
-  if (!fs.existsSync(outputPath)) {
+  if (!fs.existsSync(outputFile)) {
     const output = await generateImage(file);
     /**
      * Check if file is generated or not
@@ -53,7 +61,23 @@ server.get("/autogen/:file", async (req, res) => {
     }
   }
 
-  res.sendFile(outputPath);
+  res.sendFile(outputFile);
+});
+
+server.get("/files/del", (req, res) => {
+  const dir = withRootPath("/output/");
+
+  fs.readdir(dir, (err, files) => {
+    if (err) throw err;
+
+    for (const file of files) {
+      fs.unlink(path.join(dir, file), (err) => {
+        if (err) throw err;
+      });
+    }
+
+    res.send("Contents of output folder deleted!");
+  });
 });
 
 server.listen(process.env.PORT, () => {
