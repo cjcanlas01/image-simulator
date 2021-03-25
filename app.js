@@ -34,6 +34,7 @@ const generateImage = async (file) => {
   if (!fs.existsSync(withRootPath(design)))
     return "Design file does not exists!";
 
+  // Generate image
   const details = await sharp(template)
     .composite([{ input: design }])
     .toFile(output);
@@ -71,6 +72,11 @@ server.get("/files/del", (req, res) => {
     if (err) throw err;
 
     for (const file of files) {
+      /**
+       *  Delete all files other than .gitignore
+       * .gitignore exists to make output folder read by git
+       */
+      if (file == ".gitignore") continue;
       fs.unlink(path.join(dir, file), (err) => {
         if (err) throw err;
       });
