@@ -20,17 +20,11 @@ const withRootPath = (dir) => path.join(__dirname, dir);
  * @param {array} files
  * @returns array
  */
-const generateDownloadLink = (files) => {
-  /**
-   * 0: Template
-   * 1: Design
-   */
-  const baseTemplateUrl = process.env.BASE_TEMPLATE_URL;
+const generateDownloadLink = (file) => {
   const baseDesignUrl = process.env.BASE_DESIGN_URL;
-  const template = baseTemplateUrl + files[0] + ".jpg";
-  const design = baseDesignUrl + files[1] + ".png";
+  const design = baseDesignUrl + file + ".png";
 
-  return [template, design];
+  return design;
 };
 
 /**
@@ -59,10 +53,10 @@ const generateImage = async (file) => {
   let template = file.slice(0, index);
   let design = file.slice(index + 1).replace(".jpg", "");
 
-  const [templateLink, designLink] = generateDownloadLink([template, design]);
-
-  await downloadImage(templateLink, "template", `${template}.jpg`);
-  await downloadImage(designLink, "design", `${design}.png`);
+  if (!fs.existsSync(withRootPath(`design/${design}.png`))) {
+    const designLink = generateDownloadLink(design);
+    await downloadImage(designLink, "design", `${design}.png`);
+  }
 
   const output = `output/${file}`;
   template = `template/${template}.jpg`;
@@ -72,8 +66,6 @@ const generateImage = async (file) => {
    */
   if (!fs.existsSync(withRootPath(template)))
     return "Template file does not exists!";
-  if (!fs.existsSync(withRootPath(design)))
-    return "Design file does not exists!";
 
   // Generate image
   const details = await sharp(template)
