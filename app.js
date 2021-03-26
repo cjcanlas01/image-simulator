@@ -2,125 +2,139 @@ require("dotenv").config();
 const fetch = require("node-fetch");
 const express = require("express");
 const sharp = require("sharp");
+const { URL } = require("url");
 const path = require("path");
 const fs = require("fs");
 const server = express();
 
 /**
- * Add directory path to project path
- * @param {string} dir
- * @returns directory path
+ * Helper functions for
+ * creating directory paths
+ * or file names/ extensions
  */
-const withRootPath = (dir) => path.join(__dirname, dir);
+const root = (dir) => path.join(__dirname, dir);
+const designFolder = (file) => `design/${file}`;
+const templateFolder = (file) => `template/${file}`;
+const outputFolder = (file) => `output/${file}`;
+const JPGExt = (file) => `${file}.jpg`;
+
+/**
+ * Check if file exists
+ *
+ * @param {string} file
+ * @returns {Promise}
+ */
+const checkIfFileExists = (file) => {
+  return new Promise((resolve, reject) => {
+    fs.access(file, fs.constants.F_OK, (err) => {
+      if (err == null) {
+        resolve(true);
+      }
+      resolve(false);
+    });
+  });
+};
+
+/**
+ * Create image from downloaded image file
+ *
+ * @param {string} path
+ * @param {string} data
+ * @returns {Promise}
+ */
+const createImage = (path, data) => {
+  return new Promise((resolve, reject) => {
+    fs.writeFile(path, data, (err) => {
+      if (err == null) {
+        resolve(true);
+      }
+
+      resolve(false);
+    });
+  });
+};
 
 /**
  * Generate download link
  * add base url to file name
  *
- * @param {array} files
+ * @param {array} file
  * @returns array
  */
-const generateDownloadLink = (file) => {
-  const baseDesignUrl = process.env.BASE_DESIGN_URL;
-  const design = baseDesignUrl + file + ".png";
-
-  return design;
-};
+const generateDownloadLink = (file) =>
+  new URL(`${process.env.BASE_DESIGN_URL}${file}`);
 
 /**
  * Download image from source url
  *
  * @param {string} url
- * @param {string} dir
+ * @param {string} fileName
+ * @return {boolean}
  */
-const downloadImage = async (url, dir, fileName) => {
-  const { URL } = require("url");
-  const img = await fetch(new URL(url));
-  const buffer = await img.buffer();
-  const filePath = withRootPath(`${dir}/${fileName}`);
-  fs.writeFile(filePath, buffer, () => {
-    console.log("Finished downloading!");
-  });
-};
-
-/**
- * Generate image
- * @param {string} file
- * @returns {string} path to image
- */
-const generateImage = async (file) => {
-  const index = file.indexOf("-", file.indexOf("-") + 1);
-  let template = file.slice(0, index);
-  let design = file.slice(index + 1).replace(".jpg", "");
-
-  if (!fs.existsSync(withRootPath(`design/${design}.png`))) {
-    const designLink = generateDownloadLink(design);
-    await downloadImage(designLink, "design", `${design}.png`);
-  }
-
-  const output = `output/${file}`;
-  template = `template/${template}.jpg`;
-  design = `design/${design}.png`;
-  /**
-   * Check template and design file first if exists
-   */
-  if (!fs.existsSync(withRootPath(template)))
-    return "Template file does not exists!";
-
-  // Generate image
+const downloadImage = async (url, fileName) => {
+  const image = await fetch(new URL(url));
+  const buffer = await image.buffer();
+  const filePath = root(designFolder(fileName));
   try {
-    const details = await sharp(template)
-      .composite([{ input: design }])
-      .toFile(output);
-
-    return details;
+    if (buffer.length < 15000) return false;
+    const isCreated = await createImage(filePath, buffer);
+    if (isCreated) return true;
+    return false;
   } catch (err) {
     console.log(err);
   }
 };
 
-server.get("/", async (req, res) => {
-  res.send("Hello from template simulation app!");
-});
+/**
+ * Generate image
+ * @param {string} file
+ * @returns {boolean or object}
+ */
+const generateImage = async (file) => {
+  const indexSeparator = file.indexOf("-", file.indexOf("-") + 1);
+  const templateFile = JPGExt(file.slice(0, indexSeparator));
+  const designFile = file.slice(indexSeparator + 1).replace(".jpg", ".png");
+  const localDesign = root(designFolder(designFile));
+  const localTemplate = root(templateFolder(templateFile));
+  const output = root(outputFolder(file));
+
+  try {
+    const isFileExist = await checkIfFileExists(localDesign);
+    if (!isFileExist) {
+      const designLink = generateDownloadLink(designFile);
+      const isDownloaded = await downloadImage(designLink, designFile);
+      if (!isDownloaded) return false;
+    }
+
+    const image = await sharp(localTemplate)
+      .composite([{ input: localDesign }])
+      .toFile(output);
+
+    return image;
+  } catch (err) {
+    console.log(err);
+  }
+};
 
 server.get("/autogen/:file", async (req, res) => {
-  const file = req.params.file;
-  const outputFile = withRootPath(`output/${file}`);
-
-  if (!fs.existsSync(outputFile)) {
-    const output = await generateImage(file);
-    /**
-     * Check if file is generated or not
-     * returns message if not generated
-     */
-    if (typeof output == "string") {
-      res.send(output);
-      return;
+  const fileName = req.params.file;
+  const outputFile = root(outputFolder(fileName));
+  try {
+    const isFileExist = await checkIfFileExists(outputFile);
+    if (!isFileExist) {
+      const output = await generateImage(fileName);
+      if (output) return res.sendFile(outputFile);
+      return res.send("Design or template file does not exists!");
     }
-  }
 
-  res.sendFile(outputFile);
+    res.sendFile(outputFile);
+  } catch (err) {
+    console.log(err);
+  }
 });
 
-server.get("/files/del", (req, res) => {
-  const dir = withRootPath("/output/");
-
-  fs.readdir(dir, (err, files) => {
-    if (err) throw err;
-
-    for (const file of files) {
-      /**
-       *  Delete all files other than .gitignore
-       * .gitignore exists to make output folder read by git
-       */
-      if (file == ".gitignore") continue;
-      fs.unlink(path.join(dir, file), (err) => {
-        if (err) throw err;
-      });
-    }
-
-    res.send("Contents of output folder deleted!");
-  });
+server.get("/", async (req, res) => {
+  res.send("Hello from template simulation app!");
 });
 
 server.listen(process.env.PORT, () => {
