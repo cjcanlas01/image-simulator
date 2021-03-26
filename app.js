@@ -68,11 +68,15 @@ const generateImage = async (file) => {
     return "Template file does not exists!";
 
   // Generate image
-  const details = await sharp(template)
-    .composite([{ input: design }])
-    .toFile(output);
+  try {
+    const details = await sharp(template)
+      .composite([{ input: design }])
+      .toFile(output);
 
-  return details;
+    return details;
+  } catch (err) {
+    console.log(err);
+  }
 };
 
 server.get("/", async (req, res) => {
