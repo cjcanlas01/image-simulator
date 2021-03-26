@@ -1,4 +1,5 @@
 require("dotenv").config();
+const fetch = require("node-fetch");
 const express = require("express");
 const sharp = require("sharp");
 const path = require("path");
@@ -13,6 +14,42 @@ const server = express();
 const withRootPath = (dir) => path.join(__dirname, dir);
 
 /**
+ * Generate download link
+ * add base url to file name
+ *
+ * @param {array} files
+ * @returns array
+ */
+const generateDownloadLink = (files) => {
+  /**
+   * 0: Template
+   * 1: Design
+   */
+  const baseTemplateUrl = process.env.BASE_TEMPLATE_URL;
+  const baseDesignUrl = process.env.BASE_DESIGN_URL;
+  const template = baseTemplateUrl + files[0] + ".jpg";
+  const design = baseDesignUrl + files[1] + ".png";
+
+  return [template, design];
+};
+
+/**
+ * Download image from source url
+ *
+ * @param {string} url
+ * @param {string} dir
+ */
+const downloadImage = async (url, dir, fileName) => {
+  const { URL } = require("url");
+  const img = await fetch(new URL(url));
+  const buffer = await img.buffer();
+  const filePath = withRootPath(`${dir}/${fileName}`);
+  fs.writeFile(filePath, buffer, () => {
+    console.log("Finished downloading!");
+  });
+};
+
+/**
  * Generate image
  * @param {string} file
  * @returns {string} path to image
@@ -21,11 +58,15 @@ const generateImage = async (file) => {
   const index = file.indexOf("-", file.indexOf("-") + 1);
   let template = file.slice(0, index);
   let design = file.slice(index + 1).replace(".jpg", "");
-  const output = `output/${file}`;
 
+  const [templateLink, designLink] = generateDownloadLink([template, design]);
+
+  await downloadImage(templateLink, "template", `${template}.jpg`);
+  await downloadImage(designLink, "design", `${design}.png`);
+
+  const output = `output/${file}`;
   template = `template/${template}.jpg`;
   design = `design/${design}.png`;
-
   /**
    * Check template and design file first if exists
    */
